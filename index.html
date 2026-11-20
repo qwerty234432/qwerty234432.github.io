@@ -111,6 +111,15 @@ footer p{margin:0}
   .hero .btns{justify-content:center}
 }
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+
+/* Formulaire client */
+.client-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;max-width:760px}
+.client-form label{display:flex;flex-direction:column;gap:.35rem;font-weight:600;font-size:.95rem}
+.client-form input{padding:.7rem .85rem;border-radius:10px;border:1.5px solid var(--line);font:inherit;font-weight:400;background:var(--surface);color:var(--ink)}
+.client-form input:focus{border-color:var(--green)}
+.client-form input.err{border-color:#D64545}
+.client-form .msg{grid-column:1/-1;margin:0;font-size:.95rem;color:var(--muted)}
+.client-form .msg.ok{color:var(--green);font-weight:600}
 </style>
 </head>
 <body>
@@ -129,6 +138,28 @@ footer p{margin:0}
 </header>
 
 <main>
+  <section id="client">
+    <div class="wrap">
+      <h2>Vos informations</h2>
+      <p class="lead">Remplissez ces 3 champs, puis choisissez votre modèle et votre taille plus bas. Votre commande partira sur WhatsApp avec vos informations.</p>
+      <div class="client-form" id="clientForm">
+        <label>Nom complet
+          <input type="text" id="cNom" autocomplete="name" placeholder="Ex. Fatima Zahra">
+        </label>
+        <label>Ville
+          <input type="text" id="cVille" list="villes" autocomplete="address-level2" placeholder="Ex. Casablanca">
+          <datalist id="villes">
+            <option value="Casablanca"><option value="Rabat"><option value="Marrakech"><option value="Fès"><option value="Tanger"><option value="Agadir"><option value="Meknès"><option value="Oujda"><option value="Kénitra"><option value="Tétouan"><option value="Salé"><option value="Mohammedia"><option value="El Jadida"><option value="Béni Mellal"><option value="Nador"><option value="Settat">
+          </datalist>
+        </label>
+        <label>Téléphone
+          <input type="tel" id="cTel" inputmode="tel" autocomplete="tel" placeholder="Ex. 06 12 34 56 78">
+        </label>
+        <p class="msg" id="cMsg" role="status"></p>
+      </div>
+    </div>
+  </section>
+
   <section id="produits">
     <div class="wrap">
       <h2>Nos rayons</h2>
@@ -1080,31 +1111,62 @@ footer p{margin:0}
 <script>
 (function(){
   var links = document.querySelectorAll('.item a[href*="wa.me"], .feature a[href*="wa.me"]');
-  function toast(msg){
-    var t=document.createElement('div');t.className='toast';t.textContent=msg;
+  var fNom=document.getElementById('cNom'), fVille=document.getElementById('cVille'), fTel=document.getElementById('cTel'), msg=document.getElementById('cMsg');
+  var KEY='khalidshop_client';
+  function toast(m){
+    var t=document.createElement('div');t.className='toast';t.textContent=m;
     document.body.appendChild(t);setTimeout(function(){t.remove()},6000);
   }
+  // Se souvenir des infos du client (si le navigateur l’autorise)
+  try{
+    var saved=JSON.parse(localStorage.getItem(KEY)||'null');
+    if(saved){fNom.value=saved.nom||'';fVille.value=saved.ville||'';fTel.value=saved.tel||'';}
+  }catch(_){}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify({nom:fNom.value.trim(),ville:fVille.value.trim(),tel:fTel.value.trim()}))}catch(_){}}
+  function phoneOk(v){return /^(?:\+?212|0)[5-7]\d{8}$/.test(v.replace(/[\s.\-()]/g,''));}
+  function check(){
+    var ok=true, first=null;
+    [[fNom,fNom.value.trim().length>=2],[fVille,fVille.value.trim().length>=2],[fTel,phoneOk(fTel.value)]].forEach(function(p){
+      p[0].classList.toggle('err',!p[1]);
+      if(!p[1]){ok=false;if(!first)first=p[0];}
+    });
+    msg.className='msg';
+    if(!ok){
+      msg.textContent=first===fTel&&fTel.value.trim()?'Numéro invalide. Exemple : 06 12 34 56 78.':'Merci de remplir votre nom, votre ville et votre téléphone avant de commander.';
+    }else{msg.textContent='';}
+    return {ok:ok,first:first};
+  }
+  [fNom,fVille,fTel].forEach(function(f){f.addEventListener('input',function(){f.classList.remove('err');save();});});
+
   links.forEach(function(a){
     var baseHref=a.getAttribute('href');
     a.addEventListener('click',function(e){
       var box=a.closest('.item, .feature');
       var sel=box&&box.querySelector('select.size');
+      e.preventDefault();
+      // 1) Infos du client d’abord
+      var r=check();
+      if(!r.ok){
+        toast('Remplissez d\u2019abord vos informations (nom, ville, téléphone).');
+        document.getElementById('client').scrollIntoView({behavior:'smooth',block:'start'});
+        setTimeout(function(){r.first.focus({preventScroll:true})},400);
+        return;
+      }
+      // 2) Ensuite la taille
       var baseText=decodeURIComponent(baseHref.split('text=')[1]||'');
       var text=baseText;
       if(sel){
         if(!sel.value){
-          e.preventDefault();
           toast('Choisissez d\u2019abord votre taille.');
           sel.focus();
           return;
         }
         text=baseText.replace(/\.?$/,'')+'. Taille : '+sel.value;
       }
-      // Ouvre directement WhatsApp (numéro du magasin) avec le message prêt : modèle, réf., prix, taille
+      text+='\n\nNom : '+fNom.value.trim()+'\nVille : '+fVille.value.trim()+'\nTéléphone : '+fTel.value.trim();
+      save();
       var url='https://wa.me/212693995962?text='+encodeURIComponent(text);
       a.href=url;
-      e.preventDefault();
-      // Redirection directe vers WhatsApp dans le même onglet (fonctionne aussi dans le navigateur d’Instagram)
       window.location.href=url;
     });
   });
